@@ -1,51 +1,34 @@
 use serde::{self, Deserialize};
 use reqwest::{header::{USER_AGENT, HeaderMap, HOST, ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, ORIGIN, CONNECTION, REFERER, HeaderName, AUTHORIZATION}, Client};
 
-#[derive(Deserialize)]
+use crate::providers::common::{WeatherData, Wind};
+use crate::providers::common::WeatherType;
+
+#[derive(Deserialize, Debug)]
 struct SMNWeather{
-    description: String,
-    id: usize
+    pub(crate) description: String,
+    pub(crate) id: usize
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct SMNWind{
-    direction: String,
-    deg: f32,
-    speed: f32,
+    pub(crate) direction: String,
+    pub(crate) deg: f32,
+    pub(crate) speed: f32,
 }
 
-#[derive(Deserialize)]
-struct SMNCoords {
-    long: f32,
-    lat: f32,
-    distance: f32
-}
-
-#[derive(Deserialize)]
-struct SMNLocation {
-    id: usize,
-    name:String,
-    department:String,
-    province:String,
-    #[serde(rename = "type")]
-    smn_type: String,
-    coord: SMNCoords
-}
-
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct SMNParser {
-    date: String,
-    pressure: f32,
-    feels_line: Option<f32>,
-    temperature: f32,
-    visibility: f32,
-    weather: SMNWeather,
-    wind: SMNWind,
-    station_id: usize,
+    pub(crate) date: String,
+    pub(crate) humidity: f32,
+    pub(crate) pressure: f32,
+    pub(crate) temperature: f32,
+    pub(crate) weather: SMNWeather,
+    pub(crate) wind: SMNWind,
 }
 
 
-pub async fn now() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn now() -> Result<WeatherData, Box<dyn std::error::Error>> {
     let mut headers: HeaderMap = HeaderMap::new();
     headers.insert(HOST, "ws1.smn.gob.ar".parse().unwrap());
     headers.insert(USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/111.0".parse().unwrap());
@@ -87,7 +70,7 @@ pub async fn now() -> Result<(), Box<dyn std::error::Error>> {
 
     let now_resp = client
         .get("https://ws1.smn.gob.ar/v1/weather/location/7706")
-        .header(USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/111.0")
+        .header(USER_AGENT, "tupapichulo")
         .headers(headers)
         .send()
         .await?
@@ -95,6 +78,36 @@ pub async fn now() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let now: SMNParser = serde_json::from_str(now_resp.as_str()).unwrap();
-    println!("{:?}", now.temperature);
-    Ok(())
+    
+    let weather_type = match now.weather.id {
+        3|5   => WeatherType::DESPEJADO,
+        13|14 => WeatherType::APENASNUBLADO,
+        19|20 => WeatherType::LIJERAMENTENUBLADO,
+        25|26 => WeatherType::PARCIALMENTENUBLADO,
+        37|38 => WeatherType::MAYORMENTENUBLADO,
+        43    => WeatherType::COMPLETAMENTENUBLADO,
+        72    => WeatherType::LLUVIATORMENTA,
+        73    => WeatherType::LLUVIOSO,
+        74|75 => WeatherType::PARCIALMENTELLUVIOSO,
+        76|81 => WeatherType::LLUVIATORMENTAELECTRICA,
+        77    => WeatherType::LLUVIANIEVE,
+        79    => WeatherType::NIEVE,
+        83    => WeatherType::LLUVIACOPIOSA,
+        85    => WeatherType::NEVADACOPIOSA,
+        89    => WeatherType::FUERTESLLUVIASTORMENTAELECTRICA,
+
+        _     => WeatherType::DESPEJADO,
+    }; 
+
+    
+    let data = WeatherData {
+        date: now.date, 
+        humidity: now.humidity, 
+        pressure: now.pressure, 
+        temperature: now.temperature,
+        wind: Wind{ desc: now.wind.direction, angle: now.wind.deg, speed: now.wind.speed}, 
+        weather: weather_type
+    };
+
+    Ok(data)
 }

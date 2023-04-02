@@ -2,3 +2,4 @@
 Cargo.lock
 run.ps1
 /.vscode
+/dump

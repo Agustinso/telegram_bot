@@ -1,1 +1,2 @@
-pub(crate) mod SMN;
+pub(crate) mod smn;
+pub(crate) mod common;
